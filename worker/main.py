@@ -2,12 +2,18 @@ import time
 import json
 import urllib.request
 import urllib.error
+import os
+import multiprocessing
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import threading
 import cv2
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # Import từ các module đã tách bạch
 from camera_manager import stream_manager
@@ -22,7 +28,12 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+        "http://localhost:5173", # Dev Frontend
+        "*" # Allow all for now as requested, but suggest narrowing in prod
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -33,10 +44,15 @@ printer_manager = ThermalPrinterManager()
 
 # --- Endpoint Camera Stream ---
 def get_rtsp_url(camera_id: str) -> str:
-    # URL to the internal Laravel API, available inside docker network
-    url = f"http://web/api/internal/cameras/{camera_id}/stream-info"
+    # Use dynamic backend URL from environment
+    backend_url = os.getenv("BACKEND_API_URL", "http://localhost:8000/api")
+    url = f"{backend_url}/internal/cameras/{camera_id}/stream-info"
     try:
         req = urllib.request.Request(url)
+        # Add secret header if configured
+        secret = os.getenv("WORKER_SECRET", "worker-secret-token")
+        req.add_header("X-Internal-Secret", secret)
+        
         with urllib.request.urlopen(req, timeout=5) as response:
             data = json.loads(response.read().decode())
             if data.get('success'):
@@ -44,7 +60,7 @@ def get_rtsp_url(camera_id: str) -> str:
             else:
                 return None
     except Exception as e:
-        print(f"Error fetching camera {camera_id} info: {e}")
+        print(f"Error fetching camera {camera_id} info from {url}: {e}")
         return None
 
 def generate_frames(camera_id: str, rtsp_url: str):
@@ -145,14 +161,28 @@ def check_camera_connection(request: CheckCameraRequest):
 # --- Endpoint Mini Game Đua xe ---
 from game_manager import game_manager
 
+from typing import Optional, Any
+
 class GameRequest(BaseModel):
     phone: str
+    customer_id: Optional[Any] = None
+
+from fastapi import BackgroundTasks
 
 @app.post("/api/game/start")
-def start_mini_game(request: GameRequest):
+def start_mini_game(request: GameRequest, background_tasks: BackgroundTasks):
     """
     Kích hoạt game cho khách hàng từ xa (mở cửa sổ UI nội bộ trên máy POS)
+    Chạy bất đồng bộ qua BackgroundTasks để không treo main thread.
     """
-    result = game_manager.start_game(request.phone)
-    return result
+    background_tasks.add_task(game_manager.start_game, request.phone, request.customer_id)
+    return {"status": "started", "message": "Game đang được khởi tạo trong nền"}
+
+if __name__ == "__main__":
+    import uvicorn
+    # Required for Windows EXE packaging support
+    multiprocessing.freeze_support()
+    
+    port = int(os.getenv("WORKER_PORT", 8001))
+    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)
 

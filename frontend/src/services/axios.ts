@@ -30,7 +30,7 @@ apiClient.interceptors.request.use((config) => {
 
 // 2. Client for FastAPI Backend (Camera Stream / Prints)
 export const streamClient = axios.create({
-  baseURL: import.meta.env.VITE_STREAM_URL || 'http://localhost:8001',
+  baseURL: import.meta.env.VITE_STREAM_URL || 'http://localhost:8000',
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json',

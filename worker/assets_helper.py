@@ -35,7 +35,12 @@ import math
 import wave
 import struct
 
-def generate_beep(filename, duration=1.0, freq=440, type='sine'):
+def generate_engine_noise(filename, duration=1.0, base_freq=60, harmonic_ratio=1.5, noise_level=0.2):
+    import wave
+    import struct
+    import math
+    import random
+    
     sample_rate = 44100
     n_samples = int(sample_rate * duration)
     
@@ -46,21 +51,33 @@ def generate_beep(filename, duration=1.0, freq=440, type='sine'):
         
         for i in range(n_samples):
             t = i / sample_rate
-            if type == 'sine':
-                val = math.sin(2 * math.pi * freq * t)
-            elif type == 'square':
-                val = 1 if math.sin(2 * math.pi * freq * t) > 0 else -1
+            
+            # Layer 1: Base rumble (Sine)
+            val = 0.5 * math.sin(2 * math.pi * base_freq * t)
+            
+            # Layer 2: Harmonic (Square-ish for grit)
+            val += 0.3 * (1 if math.sin(2 * math.pi * base_freq * harmonic_ratio * t) > 0 else -1)
+            
+            # Layer 3: Combustion Noise
+            val += noise_level * random.uniform(-1, 1)
+            
+            # Add a "pulse" feel (RPM simulation)
+            pulse = 0.8 + 0.2 * math.sin(2 * math.pi * (base_freq/10) * t)
+            val *= pulse
             
             # Fade in/out to avoid clicks
             fade = 1.0
-            if i < 1000: fade = i / 1000
-            if i > n_samples - 1000: fade = (n_samples - i) / 1000
+            if i < 2000: fade = i / 2000
+            if i > n_samples - 2000: fade = (n_samples - i) / 2000
             
-            sample = int(val * 32767 * 0.3 * fade) # 30% volume
+            sample = int(max(-1, min(1, val)) * 32767 * 0.4 * fade) # 40% master volume
             f.writeframesraw(struct.pack('<h', sample))
 
-def generate_noise(filename, duration=0.5, intensity=0.5):
+def generate_collision_noise(filename, duration=0.6):
+    import wave
+    import struct
     import random
+    
     sample_rate = 44100
     n_samples = int(sample_rate * duration)
     
@@ -70,63 +87,67 @@ def generate_noise(filename, duration=0.5, intensity=0.5):
         f.setframerate(sample_rate)
         
         for i in range(n_samples):
-            val = random.uniform(-1, 1)
-            # Decay for crash
-            fade = (n_samples - i) / n_samples
-            sample = int(val * 32767 * intensity * fade)
+            # Rapid decay noise
+            decay = (1.0 - i/n_samples) ** 2
+            # High intensity white noise + some low frequency impact
+            val = 0.7 * random.uniform(-1, 1) * decay
+            val += 0.3 * random.choice([-1, 1]) * decay # Low-end thud
+            
+            sample = int(max(-1, min(1, val)) * 32767 * 0.8)
             f.writeframesraw(struct.pack('<h', sample))
 
-def create_engine_sounds(assets_dir):
-    variations = [
-        ('engine_slow.wav', 150, 'sine'),
-        ('engine_mid.wav', 250, 'sine'),
-        ('engine_fast.wav', 400, 'square')
-    ]
-    for name, freq, type in variations:
-        path = os.path.join(assets_dir, name)
-        if not os.path.exists(path):
-            generate_beep(path, duration=0.5, freq=freq, type=type)
-            print(f"Created {path}")
-
-def create_placeholder_music(assets_dir):
-    menu_path = os.path.join(assets_dir, 'menu.wav')
-    race_path = os.path.join(assets_dir, 'race.wav')
-    
-    if not os.path.exists(menu_path):
-        # A calm slow pulse for menu
-        generate_beep(menu_path, duration=2.0, freq=330, type='sine')
-        print(f"Created {menu_path}")
-        
-    if not os.path.exists(race_path):
-        # A more aggressive square wave pulse for racing
-        generate_beep(race_path, duration=0.5, freq=220, type='square')
-        print(f"Created {race_path}")
-
 def setup_assets():
-    pygame.init()
-    pygame.display.set_mode((1, 1), pygame.HIDDEN)
+    try:
+        pygame.init()
+        # Try to init display hidden just for surface creation if needed
+        try:
+            pygame.display.set_mode((1, 1), pygame.HIDDEN)
+        except:
+            print("Assets Helper: Running in display-less mode")
+    except Exception as e:
+        print(f"Assets Helper: Pygame init failed: {e}")
     
     assets_dir = os.path.join(os.path.dirname(__file__), 'assets')
     os.makedirs(assets_dir, exist_ok=True)
     
+    # Image assets
     car_path = os.path.join(assets_dir, 'car.png')
     obs_path = os.path.join(assets_dir, 'obstacle.png')
     finish_path = os.path.join(assets_dir, 'finish.png')
-    crash_path = os.path.join(assets_dir, 'crash.wav')
     
     if not os.path.exists(car_path): create_car(car_path)
     if not os.path.exists(obs_path): create_obstacle(obs_path)
     if not os.path.exists(finish_path): create_finish_line(finish_path)
     
-    if not os.path.exists(crash_path):
-        generate_noise(crash_path, duration=0.4, intensity=0.6)
-        print(f"Created {crash_path}")
+    # Sound assets (New Dynamic System)
+    # 1. Idle Sound (low freq, steady)
+    idle_path = os.path.join(assets_dir, 'engine_idle.wav')
+    if not os.path.exists(idle_path):
+        print(f"Generating {idle_path}...")
+        generate_engine_noise(idle_path, duration=2.0, base_freq=50, harmonic_ratio=1.2, noise_level=0.1)
         
-    create_engine_sounds(assets_dir)
-    create_placeholder_music(assets_dir)
+    # 2. Race Sound (higher freq, aggressive)
+    race_path = os.path.join(assets_dir, 'engine_race.wav')
+    if not os.path.exists(race_path):
+        print(f"Generating {race_path}...")
+        generate_engine_noise(race_path, duration=1.0, base_freq=120, harmonic_ratio=1.8, noise_level=0.3)
+        
+    # 3. Collision Sound
+    col_path = os.path.join(assets_dir, 'collision.wav')
+    if not os.path.exists(col_path):
+        print(f"Generating {col_path}...")
+        generate_collision_noise(col_path, duration=0.8)
     
-    print("Assets generated successfully!")
+    # Legacy fallbacks/placeholders if needed by other components
+    menu_path = os.path.join(assets_dir, 'menu.wav')
+    if not os.path.exists(menu_path):
+        generate_beep(menu_path, duration=2.0, freq=330, type='sine')
+        
+    print("Assets setup complete!")
     pygame.quit()
+
+if __name__ == '__main__':
+    setup_assets()
 
 if __name__ == '__main__':
     setup_assets()

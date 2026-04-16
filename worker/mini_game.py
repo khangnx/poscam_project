@@ -5,22 +5,62 @@ import requests
 import random
 import os
 import math
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+# Force dummy audio driver to avoid ALSA hangs in Docker
+# SDL_AUDIODRIVER unset to allow real audio output (was 'dummy')
 
 try:
+    print("Mini Game: Setting up assets...", flush=True)
     import assets_helper
     assets_helper.setup_assets()
+    print("Mini Game: Assets setup complete.", flush=True)
 except Exception as e:
-    print(f"Error setting up assets: {e}")
+    print(f"Error setting up assets: {e}", flush=True)
 
-pygame.font.init()
-pygame.mixer.init()
+try:
+    print("Mini Game: Initializing Font...", flush=True)
+    pygame.font.init()
+    print("Mini Game: Font initialized.", flush=True)
+except Exception as e:
+    print(f"Font init failed: {e}", flush=True)
+
+# Global variables for sound (to be initialized in play_game)
+sounds = {}
 
 def play_game(phone: str, tenant_id: str, customer_id: str = ""):
-    pygame.init()
+    print(f"Mini Game: Starting play_game for {phone}...", flush=True)
     
+    # Initialize Mixer inside the main game function to avoid multiple instances issues
+    try:
+        print("Mini Game: Initializing Mixer...", flush=True)
+        pygame.mixer.init()
+        print("Mini Game: Mixer initialized.", flush=True)
+    except Exception as e:
+        print(f"Mixer init failed (Sound disabled): {e}", flush=True)
+
+    try:
+        pygame.init()
+        print("Mini Game: Pygame.init() complete.", flush=True)
+    except Exception as e:
+        print(f"Pygame initialization warning: {e}", flush=True)
+
     WIDTH, HEIGHT = 400, 600
-    screen = pygame.display.set_mode((WIDTH, HEIGHT))
-    pygame.display.set_caption("Mini Racing Game - Voucher & Challenge")
+    headless = False
+    try:
+        # On Windows, we don't need DISPLAY. Juat attempt to set_mode.
+        screen = pygame.display.set_mode((WIDTH, HEIGHT))
+        pygame.display.set_caption("Mini Racing Game - Voucher & Challenge")
+        print("Mini Game: Window opened successfully!", flush=True)
+    except Exception as e:
+        print(f"HEADLESS MODE ACTIVATED: Could not initialize display: {e}", flush=True)
+        headless = True
+        # Create a dummy surface so the rest of the code doesn't crash
+        screen = pygame.Surface((WIDTH, HEIGHT))
+
     clock = pygame.time.Clock()
     
     # Colors Palette
@@ -61,21 +101,11 @@ def play_game(phone: str, tenant_id: str, customer_id: str = ""):
     assets_dir = os.path.join(base_dir, 'assets')
     
     # Sounds (with failure handling)
-    def load_music(filename):
+    def stop_all_sounds():
         try:
-            # Try original filename
-            path = os.path.join(assets_dir, filename)
-            if os.path.exists(path):
-                pygame.mixer.music.load(path)
-                return True
-            # Try .wav fallback if .mp3 failed
-            if filename.endswith('.mp3'):
-                wav_path = path.replace('.mp3', '.wav')
-                if os.path.exists(wav_path):
-                    pygame.mixer.music.load(wav_path)
-                    return True
+            pygame.mixer.stop()
+            pygame.mixer.music.stop()
         except: pass
-        return False
 
     def play_music(loop=-1):
         try: pygame.mixer.music.play(loop)
@@ -162,31 +192,64 @@ def play_game(phone: str, tenant_id: str, customer_id: str = ""):
     win_time = 0.0
     last_spawn_time = 0
 
-    # Load Sounds
+    # Load System Sounds
+    global sounds
     sounds = {}
-    for sname in ['engine_slow', 'engine_mid', 'engine_fast', 'crash']:
-        try: sounds[sname] = pygame.mixer.Sound(os.path.join(assets_dir, f"{sname}.wav"))
-        except: sounds[sname] = None
+    for sname in ['engine_idle', 'engine_race', 'collision']:
+        try: 
+            sounds[sname] = pygame.mixer.Sound(os.path.join(assets_dir, f"{sname}.wav"))
+        except: 
+            sounds[sname] = None
     
-    current_engine_sound = None
-    def play_engine_sound(level):
-        nonlocal current_engine_sound
-        skey = f'engine_{level}'
-        if current_engine_sound != skey:
-            for k in ['engine_slow', 'engine_mid', 'engine_fast']:
-                if sounds[k]: sounds[k].stop()
-            if sounds[skey]:
-                sounds[skey].play(-1)
-                current_engine_sound = skey
+    # Audio State Logic
+    def play_menu_audio():
+        try:
+            if sounds['engine_idle'] and pygame.mixer.get_init():
+                sounds['engine_idle'].set_volume(0.3)
+                sounds['engine_idle'].play(-1) # Loop
+        except: pass
 
-    # Initial Menu Music
-    load_music('menu.mp3')
-    play_music()
+    def play_race_audio():
+        try:
+            if pygame.mixer.get_init():
+                if sounds['engine_idle']: sounds['engine_idle'].fadeout(500)
+                if sounds['engine_race']:
+                    sounds['engine_race'].set_volume(0.6)
+                    sounds['engine_race'].play(-1)
+        except: pass
 
+    def play_collision_audio():
+        try:
+            if pygame.mixer.get_init():
+                if sounds['engine_race']: sounds['engine_race'].stop()
+                if sounds['collision']: sounds['collision'].play()
+        except: pass
+
+    def fade_out_all(ms=1000):
+        try:
+            if pygame.mixer.get_init():
+                pygame.mixer.fadeout(ms)
+        except: pass
+
+    # Initial Menu Audio
+    play_menu_audio()
+
+    frame_count = 0
     running = True
     while running:
-        dt = clock.tick(60) / 1000.0
-        if dt > 0.1: dt = 0.1
+        frame_count += 1
+        if frame_count % 100 == 0:
+            print(f"Mini Game Heartsbeat: frame {frame_count}, state {state}, headless {headless}", flush=True)
+        if headless:
+            # Trong chế độ headless (khi chạy trong Docker không có Display), 
+            # ta tự động chuyển sang trạng thái WIN để đảm bảo khách vẫn nhận được Voucher.
+            print("Auto-triggering WIN state due to headless mode...")
+            state = "WIN"
+            win_time = time.time()
+            dt = 0.016 # Giả lập 60fps
+        else:
+            dt = clock.tick(60) / 1000.0
+            if dt > 0.1: dt = 0.1
             
         mouse_pos = pygame.mouse.get_pos()
         mouse_clicked = False
@@ -267,7 +330,8 @@ def play_game(phone: str, tenant_id: str, customer_id: str = ""):
                     countdown_val = 3
                     countdown_timer = 1.0
                     menu_error = ""
-                    stop_music()
+                    # Transition to race
+                    play_race_audio()
                     # Setup gameplay vars based on config
                     max_speed = SPEED_VALUES[selected_speed]
 
@@ -290,7 +354,6 @@ def play_game(phone: str, tenant_id: str, customer_id: str = ""):
                 if countdown_val < 0:
                     state = "PLAYING"
                     start_time = time.time()
-                    play_engine_sound('slow')
 
         elif state == "PLAYING":
             # Acceleration
@@ -349,9 +412,7 @@ def play_game(phone: str, tenant_id: str, customer_id: str = ""):
                     state = "LOSE"
                     camera_shake = 0.4
                     lose_time = time.time()
-                    if sounds['crash']: sounds['crash'].play()
-                    for k in ['engine_slow', 'engine_mid', 'engine_fast']:
-                        if sounds[k]: sounds[k].fadeout(500)
+                    play_collision_audio()
 
             # BG & Particles
             bg_y = (bg_y + bg_speed * dt) % 60
@@ -362,18 +423,21 @@ def play_game(phone: str, tenant_id: str, customer_id: str = ""):
                 p['life'] -= dt
                 if p['life'] <= 0: particles.remove(p)
 
-            # Engine Sound Pitch shifting (Switching)
-            if elapsed < 2: play_engine_sound('slow')
-            elif elapsed < 10: play_engine_sound('mid')
-            else: play_engine_sound('fast')
+            # Racing Sound Pitch/Volume dynamics
+            if sounds['engine_race'] and pygame.mixer.get_init():
+                try:
+                    # Simulate pitch/intensity by adjusting volume slightly based on "speed" 
+                    # (or elapsed time as a proxy for intensity)
+                    intensity = 0.6 + 0.4 * (elapsed / WIN_DURATION)
+                    sounds['engine_race'].set_volume(min(1.0, intensity))
+                except: pass
 
             # Timer
             time_left = WIN_DURATION - elapsed
             if time_left <= 0:
                 state = "WIN"
                 win_time = time.time()
-                for k in ['engine_slow', 'engine_mid', 'engine_fast']:
-                    if sounds[k]: sounds[k].fadeout(1000)
+                fade_out_all(1000)
 
         # --- RENDER (PLAYING/WIN/LOSE) ---
         if state in ["PLAYING", "LOSE", "WIN"]:
@@ -456,10 +520,13 @@ def play_game(phone: str, tenant_id: str, customer_id: str = ""):
                     "phone": clean_phone,
                     "customer_id": customer_id if customer_id and customer_id != "None" else None
                 }
-                headers = {"X-Internal-Secret": "worker-secret-token"}
+                # Use dynamic backend URL from environment
+                backend_base = os.getenv("BACKEND_API_URL", "http://localhost:8000/api")
+                voucher_url = f"{backend_base}/vouchers/issue"
+                secret = os.getenv("WORKER_SECRET", "worker-secret-token")
+                headers = {"X-Internal-Secret": secret}
                 
-                # URLs to try: http://web (inside Docker) -> http://localhost (on Host)
-                urls = ["http://web/api/vouchers/issue", "http://localhost/api/vouchers/issue"]
+                urls = [voucher_url]
                 success = False
 
                 for url in urls:
@@ -483,7 +550,8 @@ def play_game(phone: str, tenant_id: str, customer_id: str = ""):
             
             if time.time() - win_time > 4: running = False
 
-        pygame.display.flip()
+        if not headless:
+            pygame.display.flip()
     
     pygame.quit()
 

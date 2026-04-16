@@ -333,7 +333,7 @@
 import { ref, computed, onMounted, nextTick } from 'vue'
 import { Search, Delete, Plus, ShoppingCart, Picture } from '@element-plus/icons-vue'
 import { ElMessage, ElNotification } from 'element-plus'
-import { apiClient } from '@/services/axios'
+import { apiClient, streamClient } from '@/services/axios'
 
 interface Material {
   id: number
@@ -722,18 +722,17 @@ const launchGame = async () => {
     })
     
     if (checkRes.data.success) {
-      // 2. Gọi Game Agent chạy trên máy POS Windows (Port 8001) để bung màn hình Game
-      const agentRes = await apiClient.post('http://localhost:8001/api/game/start', {
+      // 2. Gọi Game Agent chạy trong Docker FastAPI (Port 8000) để bung màn hình Game
+      const agentRes = await streamClient.post('/api/game/start', {
         phone: selectedCustomer.value.phone,
-        customer_id: selectedCustomer.value.id,
-        tenant_id: checkRes.data.tenant_id
+        customer_id: selectedCustomer.value.id
       })
-      if (agentRes.data.success) {
-        ElMessage.success('Đã bung cửa sổ Game! Đang theo dõi kết quả...')
+      if (agentRes.data.status === 'started') {
+        ElMessage.success('Khởi tạo Game thành công! Đang chờ kết quả...')
         // 3. Start Smart Polling for results
         startSmartPolling(selectedCustomer.value.id)
       } else {
-        ElMessage.warning(agentRes.data.message)
+        ElMessage.warning(agentRes.data.message || 'Không thể khởi động game')
       }
     } else {
       ElMessage.warning(checkRes.data.message || 'Không đủ điều kiện chơi')
@@ -742,7 +741,9 @@ const launchGame = async () => {
     if (error.code === 'ERR_NETWORK') {
       ElMessage.error('Không kết nối được Game Agent! Hãy chắc chắn bạn đã chạy file game_agent.py trên máy POS.')
     } else {
-      ElMessage.error(error.response?.data?.message || 'Phát sinh lỗi kiểm tra điều kiện')
+      const errorMsg = error.response?.data?.message || error.message || 'Lỗi không xác định'
+      ElMessage.error(`Lỗi hệ thống: ${errorMsg}`)
+      console.error('Game Launch Error:', error)
     }
   } finally {
     launchingGame.value = false
