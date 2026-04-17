@@ -20,6 +20,10 @@
           <el-icon><ShoppingCart /></el-icon>
           <span>Bán hàng (POS)</span>
         </el-menu-item>
+        <el-menu-item index="/dispatch">
+          <el-icon><Bell /></el-icon>
+          <span>Điều phối & Bếp</span>
+        </el-menu-item>
         <el-sub-menu index="product-group" v-if="authStore.hasRole('admin') || authStore.hasRole('manager')">
           <template #title>
             <el-icon><Goods /></el-icon>
@@ -232,7 +236,8 @@ import {
   Avatar,
   Box,
   Star,
-  DataLine
+  DataLine,
+  Bell
 } from '@element-plus/icons-vue'
 
 const authStore = useAuthStore()

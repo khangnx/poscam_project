@@ -22,6 +22,8 @@ class Order extends Model
         'points_earned',
         'status',
         'payment_method',
+        'completed_at',
+        'preparer_id',
     ];
 
     /**
@@ -46,5 +48,21 @@ class Order extends Model
     public function items()
     {
         return $this->hasMany(OrderItem::class);
+    }
+
+    /**
+     * Get the user who is preparing or prepared the order.
+     */
+    public function preparer()
+    {
+        return $this->belongsTo(User::class, 'preparer_id');
+    }
+
+    /**
+     * Get the status logs for the order.
+     */
+    public function statusLogs()
+    {
+        return $this->hasMany(OrderStatusLog::class);
     }
 }

@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CameraController;
 use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\WebhookController;
+use App\Http\Controllers\Api\DispatchController;
 
 /*
 |--------------------------------------------------------------------------
@@ -103,17 +104,22 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\TenantMiddleware::class]
     Route::apiResource('customers', \App\Http\Controllers\Api\CustomerController::class);
     Route::apiResource('customer-groups', \App\Http\Controllers\Api\CustomerGroupController::class);
 
-    // Orders
+    // Orders & Dispatch
     Route::get('/orders/stats', [OrderController::class, 'stats']);
     Route::post('/orders/{id}/payos-link', [OrderController::class, 'generatePaymentLink']);
     Route::get('/orders/{id}/check-payment', [OrderController::class, 'checkPaymentStatus']);
     Route::apiResource('orders', OrderController::class)->middleware('check.shift');
+    
+    Route::get('/dispatch', [DispatchController::class, 'index']);
+    Route::put('/dispatch/{id}/status', [DispatchController::class, 'updateStatus']);
     
     // Reports
     Route::middleware('role:admin,manager')->prefix('reports')->group(function () {
         Route::get('/stats', [\App\Http\Controllers\Api\ReportController::class, 'stats']);
         Route::get('/top-profitable', [\App\Http\Controllers\Api\ReportController::class, 'topProfitableProducts']);
         Route::get('/hourly-density', [\App\Http\Controllers\Api\ReportController::class, 'hourlySalesDensity']);
+        Route::get('/staff-performance', [\App\Http\Controllers\Api\ReportController::class, 'staffPerformance']);
+        Route::get('/staff-performance/{user}/history', [\App\Http\Controllers\Api\ReportController::class, 'staffOrderHistory']);
         Route::get('/export/excel', [\App\Http\Controllers\Api\ReportController::class, 'exportExcel']);
         Route::get('/print/{order}', [\App\Http\Controllers\Api\ReportController::class, 'reprintOrder']);
 

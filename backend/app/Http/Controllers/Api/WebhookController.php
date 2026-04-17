@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Order;
 use App\Models\Payment;
+use App\Models\OrderStatusLog;
 use App\Services\PayOSService;
 use App\Services\FastAPIService;
 use App\Services\TelegramService;
@@ -60,7 +61,7 @@ class WebhookController extends Controller
         }
 
         // 3. Validation
-        if ($order->status === 'completed') {
+        if ($order->status === 'paid' || $order->status === 'completed') {
             return response()->json(['success' => true, 'message' => 'Order already processed'], 200);
         }
 
@@ -83,9 +84,17 @@ class WebhookController extends Controller
         try {
             DB::beginTransaction();
 
+            $oldStatus = $order->status;
             $order->update([
-                'status' => 'completed',
+                'status' => 'paid',
                 'payment_method' => 'transfer'
+            ]);
+
+            OrderStatusLog::create([
+                'order_id' => $order->id,
+                'user_id' => null, // System/Webhook
+                'from_status' => $oldStatus,
+                'to_status' => 'paid',
             ]);
 
             Payment::create([
@@ -129,16 +138,24 @@ class WebhookController extends Controller
             return response()->json(['success' => false, 'message' => 'Order not found'], 404);
         }
 
-        if ($order->status === 'completed') {
+        if ($order->status === 'paid' || $order->status === 'completed') {
             return response()->json(['success' => true, 'message' => 'Order already processed']);
         }
 
         try {
             DB::beginTransaction();
 
+            $oldStatus = $order->status;
             $order->update([
-                'status' => 'completed',
+                'status' => 'paid',
                 'payment_method' => 'transfer'
+            ]);
+
+            OrderStatusLog::create([
+                'order_id' => $order->id,
+                'user_id' => $request->user()->id ?? null,
+                'from_status' => $oldStatus,
+                'to_status' => 'paid',
             ]);
 
             Payment::create([
@@ -175,7 +192,7 @@ class WebhookController extends Controller
         }
 
         // 1. Update status
-        $order->update(['status' => 'completed', 'payment_method' => 'transfer']);
+        $order->update(['status' => 'paid', 'payment_method' => 'transfer']);
 
         // 2. Broadcast
         broadcast(new PaymentReceived($order));

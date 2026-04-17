@@ -63,6 +63,12 @@ const router = createRouter({
           meta: { title: 'Lịch sử Đơn hàng' }
         },
         {
+          path: 'dispatch',
+          name: 'dispatch',
+          component: () => import('@/views/DispatchView.vue'),
+          meta: { title: 'Tạo món & Điều phối' }
+        },
+        {
           path: 'staff',
           name: 'staff',
           component: () => import('@/views/StaffList.vue'),

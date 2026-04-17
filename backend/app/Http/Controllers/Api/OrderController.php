@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\Validator;
 use App\Services\TelegramService;
 use App\Services\FastAPIService;
 use App\Services\LoyaltyService;
+use App\Models\OrderStatusLog;
 use App\Models\Customer;
 use App\Models\Voucher;
 
@@ -161,7 +162,7 @@ class OrderController extends Controller
             // --------------------------------------------------------
             // Bước 3: Tạo đơn hàng
             // --------------------------------------------------------
-            $orderStatus = $request->status ?? 'completed';
+            $orderStatus = $request->status ?? 'paid';
             
             // Nếu phương thức là chuyển khoản, để trạng thái là pending chờ Webhook
             if ($request->payment_method === 'transfer') {
@@ -181,6 +182,14 @@ class OrderController extends Controller
                 'payment_method' => $request->payment_method ?? 'cash',
             ]);
 
+            // Log initial status
+            OrderStatusLog::create([
+                'order_id' => $order->id,
+                'user_id' => $userId,
+                'from_status' => null,
+                'to_status' => $orderStatus,
+            ]);
+
             // --------------------------------------------------------
             // Bước 4: Tạo Order Items + Ghi log biến động (nếu completed)
             // --------------------------------------------------------
@@ -196,9 +205,9 @@ class OrderController extends Controller
             }
 
             // --------------------------------------------------------
-            // Bước 5: Tích điểm (nếu completed) & Cập nhật Voucher
+            // Bước 5: Tích điểm (nếu paid/completed) & Cập nhật Voucher
             // --------------------------------------------------------
-            if ($order->status === 'completed' && $order->customer_id) {
+            if (($order->status === 'paid' || $order->status === 'completed') && $order->customer_id) {
                 $this->loyaltyService->applyLoyalty($order);
                 
                 // Đánh dấu đã dùng Voucher
@@ -224,7 +233,7 @@ class OrderController extends Controller
         try {
             $orderWithRelations = $order->load('items.product');
 
-            if ($order->status === 'completed') {
+            if ($order->status === 'paid' || $order->status === 'completed') {
                 $this->triggerPostOrderActions($orderWithRelations);
             }
         } catch (\Throwable $e) {
@@ -276,14 +285,21 @@ class OrderController extends Controller
 
             $order->update($request->only(['status', 'payment_method']));
 
-            // Khi đơn bị hủy từ trạng thái completed → hoàn trả kho + ghi log
-            if ($request->status === 'cancelled' && $previousStatus === 'completed') {
+            // Khi đơn bị hủy từ trạng thái paid/completed → hoàn trả kho + ghi log
+            if ($request->status === 'cancelled' && in_array($previousStatus, ['paid', 'completed'])) {
                 $this->reverseStockForOrder($order, "Hoàn hàng - Đơn #{$order->id} bị hủy");
             }
 
-            // Khi đơn được chuyển sang completed từ pending → ghi log bán hàng + tích điểm
-            if ($request->status === 'completed' && $previousStatus === 'pending') {
+            // Khi đơn được chuyển sang paid từ pending → ghi log bán hàng + tích điểm
+            if ($request->status === 'paid' && $previousStatus === 'pending') {
                 $this->logSaleForOrder($order);
+
+                OrderStatusLog::create([
+                    'order_id' => $order->id,
+                    'user_id' => auth()->id(),
+                    'from_status' => $previousStatus,
+                    'to_status' => 'paid',
+                ]);
 
                 if ($order->customer_id) {
                     $this->loyaltyService->applyLoyalty($order);
@@ -300,8 +316,8 @@ class OrderController extends Controller
             ], 400);
         }
 
-        // Nếu status vừa chuyển thành completed → trigger integrations
-        if ($request->status === 'completed' && $previousStatus !== 'completed') {
+        // Nếu status vừa chuyển thành paid → trigger integrations
+        if ($request->status === 'paid' && $previousStatus === 'pending') {
             try {
                 $this->triggerPostOrderActions($order->load('items.product'));
             } catch (\Throwable $e) {
@@ -325,7 +341,7 @@ class OrderController extends Controller
         try {
             DB::beginTransaction();
 
-            if ($order->status === 'completed') {
+            if ($order->status === 'paid' || $order->status === 'completed') {
                 $this->reverseStockForOrder($order, "Hoàn hàng - Đơn #{$order->id} bị xóa");
             }
 
@@ -458,9 +474,9 @@ class OrderController extends Controller
             return response()->json(['success' => false, 'message' => 'Order not found'], 404);
         }
 
-        // If already completed, return success
-        if ($order->status === 'completed') {
-            return response()->json(['success' => true, 'status' => 'PAID', 'message' => 'Order already completed']);
+        // If already paid/completed, return success
+        if ($order->status === 'paid' || $order->status === 'completed') {
+            return response()->json(['success' => true, 'status' => 'PAID', 'message' => 'Order already processed']);
         }
 
         $result = $this->payOSService->getPaymentStatus($order->id);
@@ -471,7 +487,7 @@ class OrderController extends Controller
             if ($status === 'PAID') {
                 // Manually trigger success flow
                 DB::transaction(function() use ($order) {
-                    $order->update(['status' => 'completed']);
+                    $order->update(['status' => 'paid']);
                     // Record payment if not exists
                     \App\Models\Payment::firstOrCreate(
                         ['bank_transaction_id' => $result['data']['transactions'][0]['reference'] ?? 'MANUAL_' . time()],

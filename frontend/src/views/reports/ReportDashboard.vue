@@ -181,7 +181,106 @@
           </el-row>
         </div>
       </el-tab-pane>
+
+      <el-tab-pane label="Năng suất nhân viên" name="staff">
+        <div class="staff-container" v-loading="staffLoading">
+          <el-row :gutter="20" class="chart-row">
+            <el-col :span="24">
+              <el-card shadow="hover" class="chart-card staff-chart-card">
+                <template #header>
+                  <div class="card-header">
+                    <span><el-icon><Histogram /></el-icon> So sánh tổng đơn hoàn thành giữa các nhân viên</span>
+                  </div>
+                </template>
+                <v-chart class="chart staff-chart" :option="staffOrderOption" autoresize />
+              </el-card>
+            </el-col>
+          </el-row>
+
+          <el-card shadow="hover" class="table-card performance-table-card">
+            <template #header>
+              <div class="card-header">
+                <span><el-icon><UserFilled /></el-icon> Bảng xếp hạng năng suất xử lý đơn</span>
+              </div>
+            </template>
+            <el-table :data="staffStats" style="width: 100%" stripe @row-click="handleStaffClick" class="clickable-table">
+              <el-table-column prop="name" label="Nhân viên" min-width="150">
+                <template #default="{ row }">
+                  <div class="user-info">
+                    <el-avatar :size="30" class="user-avatar">{{ row.name.charAt(0) }}</el-avatar>
+                    <span class="user-name">{{ row.name }}</span>
+                  </div>
+                </template>
+              </el-table-column>
+              <el-table-column prop="total_completed" label="Đơn hoàn thành" width="150" align="center">
+                <template #default="{ row }">
+                  <el-tag type="success" effect="dark">{{ row.total_completed }} đơn</el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="Tốc độ tiếp nhận TB" width="180" align="center">
+                <template #default="{ row }">
+                  <div class="time-stat">
+                    <el-icon><Timer /></el-icon>
+                    <span>{{ formatDuration(row.avg_acceptance_time) }}</span>
+                  </div>
+                </template>
+              </el-table-column>
+              <el-table-column label="Tốc độ chế biến TB" width="180" align="center">
+                <template #default="{ row }">
+                  <div class="time-stat">
+                    <el-icon><Check /></el-icon>
+                    <span>{{ formatDuration(row.avg_processing_time) }}</span>
+                  </div>
+                </template>
+              </el-table-column>
+              <el-table-column label="Thao tác" width="120" align="center">
+                <template #default>
+                  <el-button link type="primary">Xem chi tiết</el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+          </el-card>
+        </div>
+      </el-tab-pane>
+
     </el-tabs>
+
+    <!-- Staff Order History Drawer -->
+    <el-drawer
+      v-model="drawerVisible"
+      :title="'Lịch sử 10 đơn gần nhất: ' + selectedStaff?.name"
+      size="500px"
+      destroy-on-close
+    >
+      <div v-loading="historyLoading" class="history-container">
+        <el-empty v-if="orderHistory.length === 0" description="Chưa có lịch sử xử lý đơn" />
+        <el-timeline v-else>
+          <el-timeline-item
+            v-for="item in orderHistory"
+            :key="item.order_id"
+            :timestamp="item.completed_at"
+            placement="top"
+            type="primary"
+          >
+            <el-card shadow="hover" class="history-item-card">
+              <div class="history-header">
+                <span class="order-id">Đơn #{{ item.order_id }}</span>
+                <span class="order-amount">{{ formatCurrency(item.total_amount) }}</span>
+              </div>
+              <p class="history-customer">Khách: {{ item.customer_name || 'Khách lẻ' }} ({{ item.items_count }} món)</p>
+              <div class="history-times">
+                <span class="time-tag">
+                  <el-icon><Timer /></el-icon> Tiếp nhận: {{ formatDuration(item.acceptance_time) }}
+                </span>
+                <span class="time-tag">
+                  <el-icon><Check /></el-icon> Chế biến: {{ formatDuration(item.processing_time) }}
+                </span>
+              </div>
+            </el-card>
+          </el-timeline-item>
+        </el-timeline>
+      </div>
+    </el-drawer>
 
   </div>
 </template>
@@ -199,10 +298,21 @@ import {
   Star,
   Lightning,
   Plus,
-  Link
+  Link,
+  UserFilled,
+  Timer,
+  Check
 } from '@element-plus/icons-vue'
 import { format, subDays, startOfMonth, endOfMonth } from 'date-fns'
-import { reportService, type ReportStats, type ProfitableProduct, type HourlyDensity, type TrendSuggestion } from '@/services/reportService'
+import { 
+  reportService, 
+  type ReportStats, 
+  type ProfitableProduct, 
+  type HourlyDensity, 
+  type TrendSuggestion,
+  type StaffPerformance,
+  type StaffOrderHistory
+} from '@/services/reportService'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 // ECharts setup
@@ -259,11 +369,23 @@ const stats = ref<ReportStats>({
 
 const topProducts = ref<ProfitableProduct[]>([])
 const hourlyDensity = ref<HourlyDensity[]>([])
+const staffStats = ref<StaffPerformance[]>([])
+const orderHistory = ref<StaffOrderHistory[]>([])
+
 const loading = ref(false)
 const exportLoading = ref(false)
+const staffLoading = ref(false)
+const historyLoading = ref(false)
+const drawerVisible = ref(false)
+const selectedStaff = ref<StaffPerformance | null>(null)
 
 const formatCurrency = (val: number) => {
   return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(val || 0)
+}
+
+const formatDuration = (seconds: number) => {
+  const minutes = seconds / 60
+  return `${minutes.toFixed(2)} phút`
 }
 
 const getRoiClass = (roi: number) => {
@@ -284,6 +406,7 @@ const fetchData = async () => {
   if (!dateRange.value) return
   loading.value = true
   fetchTrends()
+  fetchStaffPerformance()
   try {
     const [start, end] = dateRange.value
     const [sData, tData, hData] = await Promise.all([
@@ -299,6 +422,34 @@ const fetchData = async () => {
     ElMessage.error('Lỗi khi tải dữ liệu báo cáo')
   } finally {
     loading.value = false
+  }
+}
+
+const fetchStaffPerformance = async () => {
+  if (!dateRange.value) return
+  staffLoading.value = true
+  try {
+    const [start, end] = dateRange.value
+    const res = await reportService.getStaffPerformance(start, end)
+    staffStats.value = res.data.data
+  } catch (error) {
+    console.error('Lỗi tải dữ liệu nhân viên:', error)
+  } finally {
+    staffLoading.value = false
+  }
+}
+
+const handleStaffClick = async (row: StaffPerformance) => {
+  selectedStaff.value = row
+  drawerVisible.value = true
+  historyLoading.value = true
+  try {
+    const res = await reportService.getStaffOrderHistory(row.id)
+    orderHistory.value = res.data.data
+  } catch (error) {
+    console.error('Lỗi tải lịch sử đơn:', error)
+  } finally {
+    historyLoading.value = false
   }
 }
 
@@ -422,6 +573,28 @@ const hourlyOption = computed(() => ({
       data: hourlyDensity.value.map(h => h.order_count),
       areaStyle: { opacity: 0.1 },
       itemStyle: { color: '#E6A23C' }
+    }
+  ]
+}))
+
+const staffOrderOption = computed(() => ({
+  tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+  grid: { left: '3%', right: '4%', bottom: '5%', containLabel: true },
+  xAxis: { type: 'value' },
+  yAxis: { type: 'category', data: staffStats.value.map(s => s.name) },
+  series: [
+    {
+      name: 'Đơn hàng hoàn thành',
+      type: 'bar',
+      data: staffStats.value.map(s => s.total_completed),
+      itemStyle: {
+        color: (params: any) => {
+          const colors = ['#409EFF', '#67C23A', '#E6A23C', '#F56C6C', '#909399'];
+          return colors[params.dataIndex % colors.length];
+        },
+        borderRadius: [0, 5, 5, 0]
+      },
+      label: { show: true, position: 'insideRight' }
     }
   ]
 }))
@@ -625,6 +798,103 @@ onMounted(fetchData)
   display: flex;
   gap: 10px;
   margin-top: auto;
+}
+
+/* Staff Styles */
+.staff-container {
+  padding: 20px 0;
+}
+
+.staff-chart-card {
+  height: 350px;
+}
+
+.staff-chart {
+  height: 280px;
+}
+
+.performance-table-card {
+  height: auto;
+  margin-top: 20px;
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.user-avatar {
+  background-color: #409EFF;
+  color: #fff;
+  font-weight: bold;
+}
+
+.user-name {
+  font-weight: 600;
+  color: #303133;
+}
+
+.time-stat {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #606266;
+  font-size: 14px;
+}
+
+.clickable-table :deep(.el-table__row) {
+  cursor: pointer;
+}
+
+.history-container {
+  padding: 10px;
+}
+
+.history-item-card {
+  margin-bottom: 10px;
+  border-radius: 8px;
+}
+
+.history-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.order-id {
+  font-weight: bold;
+  color: #409EFF;
+}
+
+.order-amount {
+  font-weight: bold;
+  color: #67C23A;
+}
+
+.history-customer {
+  margin: 5px 0;
+  font-size: 13px;
+  color: #606266;
+}
+
+.history-times {
+  display: flex;
+  gap: 15px;
+  margin-top: 10px;
+}
+
+.time-tag {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: #909399;
+  background-color: #f4f4f5;
+  padding: 2px 8px;
+  border-radius: 4px;
 }
 
 .report-tabs :deep(.el-tabs__item) {

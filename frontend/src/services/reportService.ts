@@ -31,6 +31,24 @@ export interface HourlyDensity {
   revenue: number;
 }
 
+export interface StaffPerformance {
+  id: number;
+  name: string;
+  total_completed: number;
+  avg_acceptance_time: number;
+  avg_processing_time: number;
+}
+
+export interface StaffOrderHistory {
+  order_id: number;
+  total_amount: number;
+  customer_name: string;
+  items_count: number;
+  completed_at: string;
+  acceptance_time: number;
+  processing_time: number;
+}
+
 export const reportService = {
   getStats(startDate?: string, endDate?: string) {
     return apiClient.get<ReportStats>('/api/reports/stats', {
@@ -69,6 +87,16 @@ export const reportService = {
 
   addTrendToMenu(id: number) {
     return apiClient.post(`/api/reports/trends/${id}/add-to-menu`)
+  },
+
+  getStaffPerformance(startDate?: string, endDate?: string) {
+    return apiClient.get<StaffPerformance[]>('/api/reports/staff-performance', {
+      params: { start_date: startDate, end_date: endDate }
+    })
+  },
+
+  getStaffOrderHistory(userId: number) {
+    return apiClient.get<StaffOrderHistory[]>(`/api/reports/staff-performance/${userId}/history`)
   }
 }
 

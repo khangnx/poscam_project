@@ -104,6 +104,23 @@ def print_receipt(job: PrintJob):
     except Exception as e:
         return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
 
+# --- Endpoint Audio Notification ---
+import winsound
+
+@app.get("/api/sound/notification")
+def play_notification():
+    """
+    Phát âm thanh thông báo đơn mới tới máy POS.
+    Sử dụng winsound không chặn luồng chính.
+    """
+    try:
+        # Phát tiếng beep đặc trưng cho bếp
+        winsound.Beep(1000, 200) # (frequency, duration ms)
+        winsound.Beep(1500, 300)
+        return {"status": "success", "message": "Beeped"}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
+
 # --- Health Check ---
 @app.get("/health")
 def health_check():
