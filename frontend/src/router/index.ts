@@ -109,6 +109,12 @@ const router = createRouter({
           name: 'customer-groups',
           component: () => import('@/views/CustomerGroupList.vue'),
           meta: { title: 'Nhóm khách hàng', roles: ['admin', 'manager'] }
+        },
+        {
+          path: 'reports',
+          name: 'reports',
+          component: () => import('@/views/reports/ReportDashboard.vue'),
+          meta: { title: 'Báo cáo Chuyên sâu', roles: ['admin', 'manager'] }
         }
       ]
     }

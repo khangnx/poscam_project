@@ -60,6 +60,10 @@
           <el-menu-item index="/customers">Danh sách khách hàng</el-menu-item>
           <el-menu-item index="/customer-groups">Nhóm khách hàng</el-menu-item>
         </el-sub-menu>
+        <el-menu-item index="/reports" v-if="authStore.hasRole('admin') || authStore.hasRole('manager')">
+          <el-icon><DataLine /></el-icon>
+          <span>Trung tâm Báo cáo</span>
+        </el-menu-item>
 
         <el-sub-menu index="hr-group" v-if="authStore.hasPermission('manage_users') || authStore.hasPermission('manage_roles') || authStore.hasPermission('view_shifts')">
           <template #title>
@@ -227,7 +231,8 @@ import {
   Goods,
   Avatar,
   Box,
-  Star
+  Star,
+  DataLine
 } from '@element-plus/icons-vue'
 
 const authStore = useAuthStore()

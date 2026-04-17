@@ -26,6 +26,8 @@ Route::post('/login', [AuthController::class, 'login']);
 // Internal Worker routes (Secured via Secret Header loosely by Controller)
 Route::post('/vouchers/check-eligibility', [\App\Http\Controllers\Api\VoucherController::class, 'checkEligibility']);
 Route::post('/vouchers/issue', [\App\Http\Controllers\Api\VoucherController::class, 'issue']);
+Route::post('/internal/trends/sync', [\App\Http\Controllers\Api\TrendSuggestionController::class, 'sync']);
+
 
 // Authenticated & Tenant Scoped routes
 Route::middleware(['auth:sanctum', \App\Http\Middleware\TenantMiddleware::class])->group(function () {
@@ -99,24 +101,17 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\TenantMiddleware::class]
     Route::get('/orders/stats', [OrderController::class, 'stats']);
     Route::apiResource('orders', OrderController::class)->middleware('check.shift');
     
-    // Optional: Trigger print job
-    Route::post('/orders/print/{order}', function (\App\Models\Order $order) {
-        $order->load('items.product');
-        $fastAPIService = app(\App\Services\FastAPIService::class);
-        $response = $fastAPIService->sendPrintJob([
-            'shop_name' => 'PosCam Shop',
-            'address' => '123 Fake Street, HCM Ctty',
-            'greeting' => 'Cảm ơn quý khách và hẹn gặp lại!',
-            'items' => $order->items->map(function ($item) {
-                return [
-                    'name' => $item->product->name,
-                    'quantity' => $item->quantity,
-                    'price' => $item->price_at_purchase
-                ];
-            })->toArray(),
-            'total' => $order->total_amount
-        ]);
-        
-        return response()->json($response);
+    // Reports
+    Route::middleware('role:admin,manager')->prefix('reports')->group(function () {
+        Route::get('/stats', [\App\Http\Controllers\Api\ReportController::class, 'stats']);
+        Route::get('/top-profitable', [\App\Http\Controllers\Api\ReportController::class, 'topProfitableProducts']);
+        Route::get('/hourly-density', [\App\Http\Controllers\Api\ReportController::class, 'hourlySalesDensity']);
+        Route::get('/export/excel', [\App\Http\Controllers\Api\ReportController::class, 'exportExcel']);
+        Route::get('/print/{order}', [\App\Http\Controllers\Api\ReportController::class, 'reprintOrder']);
+
+        // Trend Suggestions
+        Route::get('/trends', [\App\Http\Controllers\Api\TrendSuggestionController::class, 'index']);
+        Route::post('/trends/{id}/add-to-menu', [\App\Http\Controllers\Api\TrendSuggestionController::class, 'addToMenu']);
     });
+
 });
