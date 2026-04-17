@@ -20,11 +20,13 @@ class OrderController extends Controller
 {
     protected InventoryService $inventoryService;
     protected LoyaltyService $loyaltyService;
+    protected \App\Services\PayOSService $payOSService;
 
-    public function __construct(InventoryService $inventoryService, LoyaltyService $loyaltyService)
+    public function __construct(InventoryService $inventoryService, LoyaltyService $loyaltyService, \App\Services\PayOSService $payOSService)
     {
         $this->inventoryService = $inventoryService;
         $this->loyaltyService = $loyaltyService;
+        $this->payOSService = $payOSService;
     }
 
     /**
@@ -160,6 +162,11 @@ class OrderController extends Controller
             // Bước 3: Tạo đơn hàng
             // --------------------------------------------------------
             $orderStatus = $request->status ?? 'completed';
+            
+            // Nếu phương thức là chuyển khoản, để trạng thái là pending chờ Webhook
+            if ($request->payment_method === 'transfer') {
+                $orderStatus = 'pending';
+            }
             $finalAmount = $totalAmount - $discountAmount;
 
             $order = Order::create([
@@ -227,7 +234,8 @@ class OrderController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Order created successfully',
-            'data'    => $order->load('items.product')
+            'data'    => $order->load('items.product'),
+            'requires_payment' => $order->payment_method === 'transfer' && $order->status === 'pending'
         ], 201);
     }
 
@@ -414,6 +422,81 @@ class OrderController extends Controller
                 );
             }
         }
+    }
+
+    /**
+     * Generate PayOS payment link for an order.
+     */
+    public function generatePaymentLink($id)
+    {
+        $order = Order::find($id);
+        if (!$order) {
+            return response()->json(['success' => false, 'message' => 'Order not found'], 404);
+        }
+
+        $result = $this->payOSService->createPaymentLink($order);
+        if ($result && isset($result['data'])) {
+            return response()->json([
+                'success' => true,
+                'data' => $result['data']
+            ]);
+        }
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Failed to generate payment link'
+        ], 400);
+    }
+
+    /**
+     * Actively check payment status from PayOS.
+     */
+    public function checkPaymentStatus($id)
+    {
+        $order = Order::with('items.product')->find($id);
+        if (!$order) {
+            return response()->json(['success' => false, 'message' => 'Order not found'], 404);
+        }
+
+        // If already completed, return success
+        if ($order->status === 'completed') {
+            return response()->json(['success' => true, 'status' => 'PAID', 'message' => 'Order already completed']);
+        }
+
+        $result = $this->payOSService->getPaymentStatus($order->id);
+        
+        if ($result && isset($result['data'])) {
+            $status = $result['data']['status']; // PAID, PENDING, CANCELLED
+            
+            if ($status === 'PAID') {
+                // Manually trigger success flow
+                DB::transaction(function() use ($order) {
+                    $order->update(['status' => 'completed']);
+                    // Record payment if not exists
+                    \App\Models\Payment::firstOrCreate(
+                        ['bank_transaction_id' => $result['data']['transactions'][0]['reference'] ?? 'MANUAL_' . time()],
+                        [
+                            'order_id' => $order->id,
+                            'amount' => $order->total_amount,
+                            'status' => 'success',
+                            'description' => 'Manual status check'
+                        ]
+                    );
+                });
+
+                // Broadcast
+                broadcast(new \App\Events\PaymentReceived($order));
+                
+                // Trigger printing
+                $this->triggerPostOrderActions($order);
+
+                return response()->json(['success' => true, 'status' => 'PAID', 'message' => 'Payment confirmed']);
+            }
+
+            return response()->json(['success' => true, 'status' => $status, 'message' => 'Payment status: ' . $status]);
+        }
+
+        return response()->json(['success' => false, 'message' => 'Could not fetch status from PayOS'], 400);
     }
 
     /**

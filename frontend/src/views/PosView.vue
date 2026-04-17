@@ -205,7 +205,7 @@
                     <el-progress 
                       :percentage="Math.min(100, Math.floor((selectedCustomer.points / nextRank.min_points) * 100))" 
                       :show-text="false"
-                      stroke-width="8"
+                      :stroke-width="8"
                       color="#f59e0b"
                     />
                     <p class="progress-hint">Còn thiếu {{ nextRank.min_points - selectedCustomer.points }} điểm nữa</p>
@@ -326,6 +326,13 @@
         </span>
       </template>
     </el-dialog>
+
+    <!-- Payment Modal -->
+    <PaymentModal 
+      v-model="paymentModalVisible" 
+      :order-id="pendingOrderId"
+      @success="handlePaymentModalSuccess"
+    />
   </div>
 </template>
 
@@ -334,6 +341,7 @@ import { ref, computed, onMounted, nextTick } from 'vue'
 import { Search, Delete, Plus, ShoppingCart, Picture } from '@element-plus/icons-vue'
 import { ElMessage, ElNotification } from 'element-plus'
 import { apiClient, streamClient } from '@/services/axios'
+import PaymentModal from '@/components/PaymentModal.vue'
 
 interface Material {
   id: number
@@ -398,6 +406,10 @@ const imageErrors = ref<Record<number, boolean>>({})
 const pollingInterval = ref<any>(null)
 const lastVoucherId = ref<number | null>(null)
 const isRewardBlinking = ref(false)
+
+// Payment Modal State
+const paymentModalVisible = ref(false)
+const pendingOrderId = ref<number | null>(null)
 
 const categories = computed(() => {
   const cats = new Set(products.value.map(p => p.category?.name).filter(Boolean))
@@ -666,21 +678,34 @@ const checkout = async () => {
   if (cart.value.length === 0) return
   submitting.value = true
   try {
-    await apiClient.post('/api/orders', {
+    const { data } = await apiClient.post('/api/orders', {
       customer_id: selectedCustomer.value?.id,
       payment_method: paymentMethod.value,
       voucher_id: useVoucher.value && availableVoucher.value ? availableVoucher.value.id : null,
       items: cart.value.map(i => ({ product_id: i.product.id, quantity: i.quantity }))
     })
-    ElMessage.success('Thanh toán thành công!')
-    clearCart()
-    deselectCustomer()
-    fetchProducts()
+
+    if (data.requires_payment) {
+      pendingOrderId.value = data.data.id
+      paymentModalVisible.value = true
+      // Don't clear cart yet, wait for payment success
+    } else {
+      ElMessage.success('Thanh toán thành công!')
+      clearCart()
+      deselectCustomer()
+      fetchProducts()
+    }
   } catch (error: any) {
     ElMessage.error(error.response?.data?.message || 'Lỗi thanh toán')
   } finally {
     submitting.value = false
   }
+}
+
+const handlePaymentModalSuccess = () => {
+  clearCart()
+  deselectCustomer()
+  fetchProducts()
 }
 
 onMounted(() => {

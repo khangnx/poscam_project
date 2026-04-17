@@ -5,6 +5,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CameraController;
 use App\Http\Controllers\Api\OrderController;
+use App\Http\Controllers\Api\WebhookController;
 
 /*
 |--------------------------------------------------------------------------
@@ -27,6 +28,11 @@ Route::post('/login', [AuthController::class, 'login']);
 Route::post('/vouchers/check-eligibility', [\App\Http\Controllers\Api\VoucherController::class, 'checkEligibility']);
 Route::post('/vouchers/issue', [\App\Http\Controllers\Api\VoucherController::class, 'issue']);
 Route::post('/internal/trends/sync', [\App\Http\Controllers\Api\TrendSuggestionController::class, 'sync']);
+
+// Payment Webhooks & Testing
+Route::post('/webhooks/payment', [WebhookController::class, 'handlePayOS']);
+Route::get('/test-payment/{id}', [WebhookController::class, 'testSuccess']);
+Route::post('/test-payment/simulate', [WebhookController::class, 'simulatePayment']);
 
 
 // Authenticated & Tenant Scoped routes
@@ -99,6 +105,8 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\TenantMiddleware::class]
 
     // Orders
     Route::get('/orders/stats', [OrderController::class, 'stats']);
+    Route::post('/orders/{id}/payos-link', [OrderController::class, 'generatePaymentLink']);
+    Route::get('/orders/{id}/check-payment', [OrderController::class, 'checkPaymentStatus']);
     Route::apiResource('orders', OrderController::class)->middleware('check.shift');
     
     // Reports
