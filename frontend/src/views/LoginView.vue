@@ -79,7 +79,12 @@ const handleLogin = async () => {
     authStore.setAuthData(token, tenant, user)
     
     ElMessage.success('Login successful')
-    router.push({ name: 'dashboard' })
+    
+    if (authStore.hasRole('staff')) {
+      router.push({ name: 'pos' })
+    } else {
+      router.push({ name: 'dashboard' })
+    }
   } catch (error: any) {
     ElMessage.error(error.response?.data?.message || 'Login failed. Please check your credentials.')
   } finally {

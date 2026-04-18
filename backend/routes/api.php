@@ -95,9 +95,6 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\TenantMiddleware::class]
         });
     });
     
-    // Dashboards
-    Route::get('/dashboard/stats', [\App\Http\Controllers\Api\DashboardController::class, 'stats']);
-
     // Customers & Loyalty
     Route::get('/customers/search', [\App\Http\Controllers\Api\CustomerController::class, 'search']);
     Route::get('/customers/{id}/vouchers', [\App\Http\Controllers\Api\VoucherController::class, 'getForCustomer']);
@@ -126,6 +123,12 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\TenantMiddleware::class]
         // Trend Suggestions
         Route::get('/trends', [\App\Http\Controllers\Api\TrendSuggestionController::class, 'index']);
         Route::post('/trends/{id}/add-to-menu', [\App\Http\Controllers\Api\TrendSuggestionController::class, 'addToMenu']);
+
+    });
+
+    // Dashboards (Protected)
+    Route::middleware('role:admin,manager')->group(function () {
+        Route::get('/dashboard/stats', [\App\Http\Controllers\Api\DashboardController::class, 'stats']);
     });
 
 });

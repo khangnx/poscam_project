@@ -359,14 +359,10 @@ const submitForm = async () => {
         if (isEdit.value) {
           // Use POST with _method=PUT to support multipart/form-data in Laravel
           formData.append('_method', 'PUT')
-          await apiClient.post(`/api/products/${props.product.id}`, formData, {
-            headers: { 'Content-Type': 'multipart/form-data' }
-          })
+          await apiClient.post(`/api/products/${props.product.id}`, formData)
           ElMessage.success('Cập nhật sản phẩm thành công')
         } else {
-          await apiClient.post('/api/products', formData, {
-            headers: { 'Content-Type': 'multipart/form-data' }
-          })
+          await apiClient.post('/api/products', formData)
           ElMessage.success('Thêm sản phẩm thành công')
         }
         emit('saved')

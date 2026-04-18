@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { ElMessage } from 'element-plus'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -18,7 +19,7 @@ const router = createRouter({
           path: '',
           name: 'dashboard',
           component: () => import('@/views/Dashboard.vue'),
-          meta: { title: 'Dashboard' }
+          meta: { title: 'Dashboard', roles: ['admin', 'manager'] }
         },
         {
           path: 'cameras',
@@ -135,8 +136,23 @@ router.beforeEach(async (to) => {
     await authStore.fetchUser()
   }
 
+  // Auth check
   if (to.meta.requiresAuth && !authStore.isAuthenticated()) {
     return { name: 'login' }
+  }
+
+  // Role check
+  if (to.meta.roles && Array.isArray(to.meta.roles)) {
+    const hasAccess = to.meta.roles.some(role => authStore.hasRole(role as string))
+    if (!hasAccess) {
+      ElMessage.error('Bạn không có quyền truy cập trang này')
+      // If it's the root/dashboard, redirect staff to POS
+      if (to.name === 'dashboard' && authStore.hasRole('staff')) {
+        return { name: 'pos' }
+      }
+      // Otherwise go back or to POS
+      return { name: 'pos' }
+    }
   }
 })
 

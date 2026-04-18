@@ -33,8 +33,6 @@ services:
       dockerfile: docker/laravel/Dockerfile
     container_name: shop_laravel
     restart: unless-stopped
-    ports:
-      - "8080:8080"
     volumes:
       - ./backend:/var/www/html
     networks:
@@ -42,6 +40,23 @@ services:
     depends_on:
       - mysql
       - redis
+
+  # 3. Laravel Reverb (WebSocket Server)
+  reverb:
+    build:
+      context: .
+      dockerfile: docker/laravel/Dockerfile
+    container_name: shop_reverb
+    restart: unless-stopped
+    command: ["php", "artisan", "reverb:start", "--host=0.0.0.0", "--port=8080"]
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./backend:/var/www/html
+    networks:
+      - shop_network
+    depends_on:
+      - app
   # 4. Vue 3 (Frontend - Vite)
   frontend:
     build:

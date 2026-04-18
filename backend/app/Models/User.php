@@ -17,8 +17,28 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
+    protected $guard_name = 'web';
+
     /** @use HasFactory<UserFactory> */
     use HasApiTokens, HasFactory, Notifiable, BelongsToTenant, \Spatie\Permission\Traits\HasRoles, SoftDeletes;
+
+    protected $appends = ['avatar_url'];
+
+    /**
+     * Get the full URL for the user avatar.
+     */
+    public function getAvatarUrlAttribute()
+    {
+        if (!$this->avatar) {
+            return null;
+        }
+
+        if (filter_var($this->avatar, FILTER_VALIDATE_URL)) {
+            return $this->avatar;
+        }
+
+        return \Illuminate\Support\Facades\Storage::disk('public')->url($this->avatar);
+    }
 
     /**
      * Get the attributes that should be cast.

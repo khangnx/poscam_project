@@ -108,17 +108,27 @@ class WebhookController extends Controller
             DB::commit();
 
             // 5. Broadcast Success
-            broadcast(new PaymentReceived($order));
+            try {
+                broadcast(new PaymentReceived($order));
+            } catch (\Throwable $be) {
+                Log::warning('PayOS Webhook Broadcast failed: ' . $be->getMessage());
+            }
 
             // 6. Trigger Post-Order Actions (Telegram & Print)
-            $this->triggerPostOrderActions($order);
+            try {
+                $this->triggerPostOrderActions($order);
+            } catch (\Throwable $ae) {
+                Log::error('PayOS Webhook Post-Order Actions failed: ' . $ae->getMessage());
+            }
 
             return response()->json(['success' => true, 'message' => 'Payment processed successfully'], 200);
 
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             DB::rollBack();
-            Log::error('PayOS Webhook Processing Error: ' . $e->getMessage());
-            return response()->json(['success' => false, 'message' => 'Internal Server Error'], 500);
+            Log::error('PayOS Webhook Processing Error: ' . $e->getMessage(), [
+                'stack' => $e->getTraceAsString()
+            ]);
+            return response()->json(['success' => false, 'message' => 'Internal Server Error: ' . $e->getMessage()], 500);
         }
     }
 
@@ -153,7 +163,7 @@ class WebhookController extends Controller
 
             OrderStatusLog::create([
                 'order_id' => $order->id,
-                'user_id' => $request->user()->id ?? null,
+                'user_id' => $request->user()?->id ?? null,
                 'from_status' => $oldStatus,
                 'to_status' => 'paid',
             ]);
@@ -169,14 +179,20 @@ class WebhookController extends Controller
             DB::commit();
 
             // Broadcast success
-            broadcast(new PaymentReceived($order));
+            try {
+                broadcast(new PaymentReceived($order));
+            } catch (\Throwable $be) {
+                Log::warning('Simulate Payment Broadcast failed: ' . $be->getMessage());
+            }
 
             return response()->json(['success' => true, 'message' => 'Simulated successfully']);
 
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             DB::rollBack();
-            Log::error('Simulate Payment Error: ' . $e->getMessage());
-            return response()->json(['success' => false, 'message' => 'Internal Server Error'], 500);
+            Log::error('Simulate Payment Error: ' . $e->getMessage(), [
+                'stack' => $e->getTraceAsString()
+            ]);
+            return response()->json(['success' => false, 'message' => 'Internal Server Error: ' . $e->getMessage()], 500);
         }
     }
 

@@ -25,7 +25,8 @@ class RolePermissionSeeder extends Seeder
             'manage_products',
             'view_orders',
             'view_cameras',
-            'manage_cameras'
+            'manage_cameras',
+            'view_dashboard'
         ];
 
         foreach ($permissions as $permission) {
@@ -41,7 +42,7 @@ class RolePermissionSeeder extends Seeder
         $admin->syncPermissions($permissions);
 
         // Give some permissions to manager & staff as defaults
-        $manager->syncPermissions(['view_shifts', 'sell', 'manage_products', 'view_orders', 'view_cameras']);
+        $manager->syncPermissions(['view_shifts', 'sell', 'manage_products', 'view_orders', 'view_cameras', 'view_dashboard']);
         $staff->syncPermissions(['sell', 'view_orders']);
 
         // Assign first user as admin if exists

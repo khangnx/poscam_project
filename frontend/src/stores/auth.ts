@@ -56,6 +56,9 @@ export const useAuthStore = defineStore('auth', () => {
     return user.value?.permissions_list?.includes(permission) || false
   }
 
+  const isStaff = () => hasRole('staff')
+  const canViewDashboard = () => !isStaff() || hasPermission('view_dashboard')
+
   return {
     token,
     tenantId,
@@ -65,6 +68,8 @@ export const useAuthStore = defineStore('auth', () => {
     fetchUser,
     isAuthenticated,
     hasRole,
-    hasPermission
+    hasPermission,
+    isStaff,
+    canViewDashboard
   }
 })

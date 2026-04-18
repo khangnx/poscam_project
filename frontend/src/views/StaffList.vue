@@ -13,7 +13,7 @@
       <el-table-column label="Nhân viên" min-width="200">
         <template #default="{ row }">
           <div style="display: flex; align-items: center; gap: 10px;">
-            <el-avatar :size="40" :src="row.avatar || 'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png'" />
+            <el-avatar :size="40" :src="row.avatar_url || 'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png'" />
             <div style="display: flex; flex-direction: column;">
               <span style="font-weight: 500;">{{ row.name }}</span>
               <span style="color: #909399; font-size: 13px;">{{ row.email }}</span>
@@ -187,7 +187,6 @@ const form = reactive({
 const avatarFile = ref<File | null>(null)
 const imageUrl = ref<string>('')
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost'
 
 const getRoleTagType = (role: string) => {
   if (role === 'admin') return 'danger'
@@ -217,13 +216,7 @@ const fetchUsers = async () => {
   loading.value = true
   try {
     const { data } = await apiClient.get('/api/users')
-    users.value = data.data.map((u: any) => {
-        // Prepare full URL for avatar if it exists
-        if (u.avatar && !u.avatar.startsWith('http')) {
-             u.avatar = BASE_URL + u.avatar
-        }
-        return u
-    })
+    users.value = data.data
   } catch (error) {
     ElMessage.error('Lỗi tải danh sách nhân viên')
   } finally {
@@ -258,7 +251,7 @@ const openDialog = (row?: any) => {
     form.email = row.email
     form.phone = row.phone || ''
     form.role = row.roles?.[0]?.name || ''
-    imageUrl.value = row.avatar || ''
+    imageUrl.value = row.avatar_url || ''
   } else {
     form.id = null
     form.name = ''
@@ -294,14 +287,10 @@ const submitForm = async () => {
         if (isEdit.value) {
             // Laravel PUT with FormData can be tricky. Use POST with _method = PUT.
             formData.append('_method', 'PUT')
-            await apiClient.post(`/api/users/${form.id}`, formData, {
-               headers: { 'Content-Type': 'multipart/form-data' }
-            })
+            await apiClient.post(`/api/users/${form.id}`, formData)
             ElMessage.success('Cập nhật nhân viên thành công')
         } else {
-            await apiClient.post('/api/users', formData, {
-               headers: { 'Content-Type': 'multipart/form-data' }
-            })
+            await apiClient.post('/api/users', formData)
             ElMessage.success('Tạo nhân viên mới thành công')
         }
         dialogVisible.value = false

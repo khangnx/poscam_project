@@ -12,7 +12,7 @@
         active-text-color="#409EFF"
         router
       >
-        <el-menu-item index="/">
+        <el-menu-item index="/" v-if="!authStore.hasRole('staff')">
           <el-icon><DataBoard /></el-icon>
           <span>Dashboard</span>
         </el-menu-item>
@@ -90,8 +90,9 @@
         <div class="header-right">
           <el-dropdown trigger="click" @command="handleCommand">
             <span class="el-dropdown-link user-profile">
-              <el-avatar size="small" icon="UserFilled" />
-              <span class="username">{{ authStore.tenantId || 'User' }}</span>
+              <el-avatar v-if="authStore.user?.avatar_url" size="small" :src="authStore.user.avatar_url" />
+              <el-avatar v-else size="small" icon="UserFilled" />
+              <span class="username">{{ authStore.user?.name || authStore.tenantId || 'User' }}</span>
               <el-icon class="el-icon--right"><arrow-down /></el-icon>
             </span>
             <template #dropdown>

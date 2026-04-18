@@ -27,6 +27,9 @@ class UserController extends Controller
 
     public function store(Request $request)
     {
+        \Illuminate\Support\Facades\Log::info('User creation request:', $request->all());
+        \Illuminate\Support\Facades\Log::info('Avatar file:', [$request->file('avatar')]);
+
         $tenantId = $request->user()->tenant_id;
         
         $request->validate([
@@ -39,7 +42,7 @@ class UserController extends Controller
             ],
             'phone' => 'nullable|string|max:20',
             'role' => 'required|string|exists:roles,name',
-            'avatar' => 'nullable|image|max:2048' // max 2MB
+            'avatar' => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:2048' // max 2MB
         ]);
 
         $data = $request->only(['name', 'email', 'phone']);
@@ -49,7 +52,7 @@ class UserController extends Controller
 
         if ($request->hasFile('avatar')) {
             $path = $request->file('avatar')->store('avatars', 'public');
-            $data['avatar'] = '/storage/' . $path;
+            $data['avatar'] = $path;
         }
 
         $user = User::create($data);
@@ -68,6 +71,9 @@ class UserController extends Controller
             return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
         }
 
+        \Illuminate\Support\Facades\Log::info('User update request ID: ' . $user->id, $request->all());
+        \Illuminate\Support\Facades\Log::info('Avatar file present:', [$request->hasFile('avatar')]);
+
         $request->validate([
             'name' => 'sometimes|required|string|max:255',
             'email' => [
@@ -78,7 +84,7 @@ class UserController extends Controller
             ],
             'phone' => 'nullable|string|max:20',
             'role' => 'sometimes|required|string|exists:roles,name',
-            'avatar' => 'nullable|image|max:2048',
+            'avatar' => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:2048',
             'is_active' => 'sometimes|boolean',
             'password' => 'nullable|string|min:6'
         ]);
@@ -95,7 +101,7 @@ class UserController extends Controller
                 Storage::disk('public')->delete(str_replace('/storage/', '', $user->avatar));
             }
             $path = $request->file('avatar')->store('avatars', 'public');
-            $data['avatar'] = '/storage/' . $path;
+            $data['avatar'] = $path;
         }
 
         $user->update($data);
