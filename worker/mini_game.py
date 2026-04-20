@@ -264,6 +264,13 @@ def play_game(phone: str, tenant_id: str, customer_id: str = ""):
         keys = pygame.key.get_pressed()
         
         # --- LOGIC ---
+        # Shared timing variables for rendering and logic safety
+        elapsed = time.time() - start_time if start_time > 0 else 0
+        time_left = WIN_DURATION - elapsed
+        fy = -999.0
+        if time_left <= 2 and start_time > 0:
+            fy = HEIGHT - (time_left / 2.0) * HEIGHT
+
         if state == "MENU":
             # Draw blurred background feel (just a static track)
             screen.fill(GRASS_COLOR)
@@ -381,12 +388,18 @@ def play_game(phone: str, tenant_id: str, customer_id: str = ""):
                 car_x = track_right
                 velocity = 0
 
-            # Obstacle Spawning
-            elapsed = time.time() - start_time
+            # Victory condition (using pre-calculated fy and time_left)
+            if time_left <= 2 and fy >= car_y:
+                state = "WIN"
+                win_time = time.time()
+                fade_out_all(1000)
+                continue # Skip obstacles collision if already won
+
+            # Obstacle Spawning (STOP spawning when finish line appears)
             is_hardcore = (selected_speed == 2 and selected_density == 2)
             spawn_delay = DENSITY_VALUES[selected_density] * (0.8 if is_hardcore else 1.0)
             
-            if time.time() - last_spawn_time > spawn_delay:
+            if time.time() - last_spawn_time > spawn_delay and time_left > 2:
                 obs = spawn_obstacle(400 + (elapsed * 10))
                 if is_hardcore:
                     obs['zigzag'] = random.uniform(2, 4)
@@ -405,14 +418,16 @@ def play_game(phone: str, tenant_id: str, customer_id: str = ""):
                     score += 1
                 
                 # Collision with forgiving hitbox (10% smaller)
-                car_rect = pygame.Rect(car_x, car_y, car_width, car_height).inflate(- car_width*0.1, - car_height*0.1)
-                obs_rect = pygame.Rect(obs['x'], obs['y'], car_width, car_height).inflate(- car_width*0.1, - car_height*0.1)
-                
-                if car_rect.colliderect(obs_rect):
-                    state = "LOSE"
-                    camera_shake = 0.4
-                    lose_time = time.time()
-                    play_collision_audio()
+                # Only check collision if NOT in WIN state (additional safety)
+                if state == "PLAYING":
+                    car_rect = pygame.Rect(car_x, car_y, car_width, car_height).inflate(- car_width*0.1, - car_height*0.1)
+                    obs_rect = pygame.Rect(obs['x'], obs['y'], car_width, car_height).inflate(- car_width*0.1, - car_height*0.1)
+                    
+                    if car_rect.colliderect(obs_rect):
+                        state = "LOSE"
+                        camera_shake = 0.4
+                        lose_time = time.time()
+                        play_collision_audio()
 
             # BG & Particles
             bg_y = (bg_y + bg_speed * dt) % 60
@@ -432,8 +447,7 @@ def play_game(phone: str, tenant_id: str, customer_id: str = ""):
                     sounds['engine_race'].set_volume(min(1.0, intensity))
                 except: pass
 
-            # Timer
-            time_left = WIN_DURATION - elapsed
+            # Timer (Handled above, but keeping for logic consistency if needed elsewhere)
             if time_left <= 0:
                 state = "WIN"
                 win_time = time.time()
@@ -466,13 +480,10 @@ def play_game(phone: str, tenant_id: str, customer_id: str = ""):
                 pygame.draw.rect(screen, WHITE, (WIDTH//2 - 5 + shake_x, y_pos + shake_y, 10, 30))
 
             # Finish Line
-            if state == "PLAYING":
-                time_left = WIN_DURATION - (time.time() - start_time)
+            if state == "PLAYING" or state == "WIN":
                 if time_left <= 2:
-                    fy = HEIGHT - (time_left / 2) * HEIGHT
+                    # Use the same fy calculated at logic start
                     screen.blit(finish_img, (shake_x, int(fy) + shake_y))
-            elif state == "WIN":
-                screen.blit(finish_img, (shake_x, HEIGHT - 120 + shake_y))
 
             # Obstacles
             for obs in obstacles:
