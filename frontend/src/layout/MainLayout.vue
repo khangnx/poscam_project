@@ -64,6 +64,16 @@
           <el-menu-item index="/customers">Danh sách khách hàng</el-menu-item>
           <el-menu-item index="/customer-groups">Nhóm khách hàng</el-menu-item>
         </el-sub-menu>
+
+        <el-sub-menu index="asset-group" v-if="authStore.hasRole('admin') || authStore.hasRole('manager')">
+          <template #title>
+            <el-icon><Box /></el-icon>
+            <span>Quản lý Tài sản</span>
+          </template>
+          <el-menu-item index="/assets">Danh sách tài sản</el-menu-item>
+          <el-menu-item index="/asset-categories">Danh mục</el-menu-item>
+        </el-sub-menu>
+
         <el-menu-item index="/reports" v-if="authStore.hasRole('admin') || authStore.hasRole('manager')">
           <el-icon><DataLine /></el-icon>
           <span>Trung tâm Báo cáo</span>

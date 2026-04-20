@@ -93,6 +93,10 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\TenantMiddleware::class]
             Route::post('/waste', [\App\Http\Controllers\Api\InventoryController::class, 'waste']);
             Route::apiResource('imports', \App\Http\Controllers\Api\StockImportController::class)->only(['index', 'store', 'show']);
         });
+
+        // Asset Management
+        Route::apiResource('asset-categories', \App\Http\Controllers\Api\AssetCategoryController::class);
+        Route::apiResource('assets', \App\Http\Controllers\Api\AssetController::class);
     });
     
     // Customers & Loyalty

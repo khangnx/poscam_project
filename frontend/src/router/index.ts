@@ -122,6 +122,18 @@ const router = createRouter({
           name: 'reports',
           component: () => import('@/views/reports/ReportDashboard.vue'),
           meta: { title: 'Báo cáo Chuyên sâu', roles: ['admin', 'manager'] }
+        },
+        {
+          path: 'assets',
+          name: 'assets',
+          component: () => import('@/views/AssetList.vue'),
+          meta: { title: 'Quản lý Tài sản', roles: ['admin', 'manager'] }
+        },
+        {
+          path: 'asset-categories',
+          name: 'asset-categories',
+          component: () => import('@/views/AssetCategoryList.vue'),
+          meta: { title: 'Danh mục Tài sản', roles: ['admin', 'manager'] }
         }
       ]
     }
